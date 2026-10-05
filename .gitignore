@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+config/global.yaml
+config/jobs/*.yaml
+!config/templates/
+data/
+locks/
+*.pid

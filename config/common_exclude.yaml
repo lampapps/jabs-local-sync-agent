@@ -1,0 +1,17 @@
+# =============================================================================
+# Common exclude patterns, shared across all jobs when use_common_exclude: true
+# =============================================================================
+# rsync --exclude patterns (relative to each path's source root).
+# See: https://download.samba.org/pub/rsync/rsync.1#FILTER_RULES
+
+- "*.tmp"
+- "*.cache"
+- "*.part"
+- "__pycache__/"
+- "node_modules/"
+- ".cache/"
+- ".DS_Store"
+- "Thumbs.db"
+- ".Trash-*/"
+- "lost+found/"
+- ".rsync-partial/"

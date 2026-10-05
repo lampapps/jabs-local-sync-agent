@@ -1,0 +1,34 @@
+# Example job config — copy this file to config/jobs/<job_name>.yaml and edit.
+
+job_name: "example"
+
+# One or more source/destination pairs synced by this job. Each pair is
+# reported to the dashboard as its own tracked job (job_name:name), so a
+# failure in one pair never stops the others below it.
+paths:
+  - name: "documents"            # optional; defaults to the source's basename
+    source: "/mnt/nas1/documents"
+    destination: "/mnt/nas2/documents"
+    # Uncomment to add excludes on top of the job-level + common list, for
+    # this pair only.
+    #exclude:
+      #- "Archive/"
+
+schedules:
+  - cron: "0 2 * * *"    # 2:00 AM daily
+    enabled: false
+
+# Uncomment to add job-level excludes (applied to every pair above, on top
+# of config/common_exclude.yaml).
+#exclude:
+  #- "Downloads/"
+  #- "*.iso"
+
+# Uncomment to override any global.yaml setting for this job only, e.g.:
+#delete: true
+#preserve_permissions: true
+#io_timeout: 300
+#max_duration: 0
+#min_free_bytes: 0
+#verify_after_sync: true
+#extra_args: ["--bwlimit=1000"]

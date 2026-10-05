@@ -1,0 +1,83 @@
+# =============================================================================
+# JABS Local Sync Agent Global Configuration Example
+# =============================================================================
+# Copy this file to 'global.yaml' and customize for your environment.
+# This file contains system-wide settings that apply to all sync jobs unless
+# overridden in an individual job configuration (config/jobs/*.yaml).
+#
+# This agent mirrors directories between local/NFS-mounted paths on the SAME
+# host (no remote-shell rsync, no bandwidth limiting, no compression — see
+# README.md for why those don't apply here).
+
+# --- Exclusions ---
+use_common_exclude: true   # true | false - use patterns from config/common_exclude.yaml
+
+# --- Mirror behavior ---
+# Exact mirror: files removed from the source are removed from the
+# destination on the next run. Set to false for an append-only copy.
+delete: true
+
+# --- rsync attribute preservation ---
+# Ownership (uid/gid) is NOT preserved by default: two NFS clients rarely
+# share the same uid/gid mapping, so copying ownership across hosts usually
+# just produces wrong owners rather than useful metadata. Enable only if this
+# host and its NFS mounts share a common user/group directory (e.g. LDAP/NIS).
+preserve_owner: false
+preserve_group: false
+preserve_permissions: true
+
+# Skip NFS name (uid/gid -> username/group) lookups entirely; irrelevant
+# when preserve_owner/group are false, but cheap and safe to leave on.
+numeric_ids: true
+
+# Skip rsync's delta-transfer (rolling checksum) algorithm and copy whole
+# files instead. On a LAN/NFS mount, bandwidth is not the bottleneck, so
+# straight whole-file copies are usually faster and lighter on CPU than
+# computing block checksums on both sides.
+whole_file: true
+
+# Preserve hard links within a source tree (adds overhead; leave off unless
+# you know a source tree relies on them).
+hard_links: false
+
+# rsync's own --timeout (seconds): abort if no data is transferred for this
+# long, so a stalled NFS mount doesn't hang a job indefinitely. This is an
+# IDLE timeout, not a cap on total run time -- a large sync that keeps making
+# progress can safely run well past this many seconds.
+io_timeout: 300
+
+# Optional hard wall-clock cap (seconds) on the whole rsync run, independent
+# of io_timeout above. Only needed as a last-resort safety net (e.g. rsync's
+# own --timeout failing to detect a wedged NFS mount). Leave unset/0 for no
+# cap, since large legitimate transfers should not be killed early.
+#max_duration: 0
+
+# Minimum free space required on the destination before syncing (bytes).
+# Set to 0 to disable the check.
+min_free_bytes: 0   # e.g. 10737418240 for 10 GiB
+
+# Raw passthrough for additional rsync flags not covered by the options
+# above. Rarely needed; mainly useful for testing experimental rsync flags.
+#extra_args: ["--bwlimit=1000"]
+
+# --- Integrity checks ---
+# A cheap quick verify (rsync --dry-run comparing size/mtime only — no file
+# content is read) runs automatically after every pair's sync unless disabled
+# here or per-job. Set to false to skip it.
+# For a slow, thorough check that reads and compares actual file content, run
+# manually: ./jabs-agent.sh check-deep [--job NAME]
+verify_after_sync: true
+
+# --- Email (immediate failure/completion alerts; the dashboard only sends a
+# periodic digest, so per-event alerting for this agent's own jobs lives here) ---
+email:
+  smtp_server: "smtp.zoho.com"
+  smtp_port: 587
+  to_addrs:
+    - "admin@example.com"
+  use_tls: true
+  notify_on:
+    error:
+      enabled: true
+    backup_complete:
+      enabled: false
