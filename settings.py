@@ -6,7 +6,7 @@ from datetime import timedelta
 import yaml
 from dotenv import load_dotenv
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 # Type of agent, reported to the dashboard so it can distinguish agent kinds
 # on the Agents page, and used to key its per-agent-type retention policy.

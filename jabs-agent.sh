@@ -271,6 +271,15 @@ reset_app() {
     print_section "JABS Local Sync Agent Reset"
     print_warning "This will NOT touch your synced files or config — only local logs/locks."
 
+    read -r -p "Are you sure you want to reset the JABS Local Sync Agent? [y/N] " confirm
+    case "$confirm" in
+        [yY]|[yY][eE][sS]) ;;
+        *)
+            print_status "Reset cancelled."
+            return 1
+            ;;
+    esac
+
     print_status "Clearing logs..."
     if [ -d "$SCRIPT_DIR/data/logs" ]; then
         rm -f "$SCRIPT_DIR/data/logs"/*.log
