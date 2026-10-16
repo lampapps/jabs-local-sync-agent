@@ -10,8 +10,10 @@ this module never logs or swallows failures itself.
 
 import os
 import re
+import shutil
 import subprocess
 import time
+from datetime import datetime, timedelta
 
 from settings import RSYNC_BIN
 
@@ -43,6 +45,10 @@ _RATE_MULTIPLIERS = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB":
 # ">f.st....." or "*deleting") followed by a space and the path. A tree with
 # no differences prints nothing.
 _ITEMIZE_LINE_RE = re.compile(r"^([><ch.*][fdLDS*].{9}|\*deleting) ")
+
+# Per-run --backup-dir subdirectory name format, shared with backup.py so the
+# directory it creates is the same format prune_backup_dir() parses back out.
+BACKUP_DIR_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
 class RsyncError(RuntimeError):
@@ -135,7 +141,7 @@ def build_exclude_args(exclude_patterns):
 
 def build_base_args(delete=True, preserve_owner=False, preserve_group=False,
                      preserve_permissions=True, numeric_ids=True, whole_file=True,
-                     hard_links=False, timeout=300, extra_args=None):
+                     hard_links=False, timeout=300, backup_dir=None, extra_args=None):
     """
     Build the shared rsync flag set used for an actual sync run.
 
@@ -147,6 +153,10 @@ def build_base_args(delete=True, preserve_owner=False, preserve_group=False,
         or NFS I/O and no bandwidth constraint, a straight copy is cheaper
         than computing rolling checksums)
       - no compression, no bandwidth limiting (not needed on a LAN)
+
+    backup_dir, if given, is passed through to --backup-dir (with --backup
+    and an empty --suffix) so files that would be overwritten/deleted on the
+    destination are preserved there instead of being lost.
     """
     args = ["--recursive", "--links", "--times", "--devices", "--specials"]
     if preserve_permissions:
@@ -171,6 +181,8 @@ def build_base_args(delete=True, preserve_owner=False, preserve_group=False,
     ]
     if timeout:
         args.append(f"--timeout={timeout}")
+    if backup_dir:
+        args += ["--backup", f"--backup-dir={backup_dir}", "--suffix="]
     args += list(extra_args or [])
     return args
 
@@ -265,6 +277,35 @@ def check_path_accessible(path):
         return True
     except OSError:
         return False
+
+
+def prune_backup_dir(root, retention_days):
+    """
+    Delete immediate subdirectories of `root` named in BACKUP_DIR_TIMESTAMP_FORMAT
+    whose timestamp is older than retention_days. Subdirectory names that don't
+    match the expected format are left alone. Best-effort: a failure removing
+    one subdirectory doesn't stop the rest. Returns the number removed.
+    """
+    if retention_days is None or retention_days <= 0 or not os.path.isdir(root):
+        return 0
+
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    removed = 0
+    for name in os.listdir(root):
+        path = os.path.join(root, name)
+        if not os.path.isdir(path):
+            continue
+        try:
+            run_time = datetime.strptime(name, BACKUP_DIR_TIMESTAMP_FORMAT)
+        except ValueError:
+            continue
+        if run_time < cutoff:
+            try:
+                shutil.rmtree(path)
+                removed += 1
+            except OSError:
+                pass
+    return removed
 
 
 def free_space_bytes(path):

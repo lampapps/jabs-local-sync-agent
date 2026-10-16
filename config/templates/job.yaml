@@ -13,6 +13,17 @@ paths:
     # this pair only.
     #exclude:
       #- "Archive/"
+    # Uncomment to override the job/global backup_dir for this pair only.
+    #backup_dir: "/mnt/nas2/.jabs-backups"
+  - name: "documents2"            # optional; defaults to the source's basename
+    source: "/mnt/nas1/documents2"
+    destination: "/mnt/nas2/documents2"
+    # Uncomment to add excludes on top of the job-level + common list, for
+    # this pair only.
+    #exclude:
+      #- "Archive/"
+    # Uncomment to override the job/global backup_dir for this pair only.
+    #backup_dir: "/mnt/nas2/jabs-backups2"
 
 schedules:
   - cron: "0 2 * * *"    # 2:00 AM daily
@@ -32,3 +43,5 @@ schedules:
 #min_free_bytes: 0
 #verify_after_sync: true
 #extra_args: ["--bwlimit=1000"]
+#backup_dir: "/mnt/nas2/.jabs-backups"
+#backup_dir_retention_days: 30

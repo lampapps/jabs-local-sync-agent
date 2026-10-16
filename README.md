@@ -106,6 +106,24 @@ Both are also available directly through `backup.py --check` /
 - rsync exit codes 23/24 (partial transfer — some files skipped/vanished) are
   treated as a warning, not a failure, matching `nas_sync_agent`'s convention.
 
+## Backup directory
+
+Setting `backup_dir` (job-level, or per-pair under `paths[]` to override it)
+enables rsync's `--backup --backup-dir`: any file a sync would otherwise
+overwrite or delete on the destination is moved there instead of being lost.
+Each run gets its own subdirectory so nothing from a previous run is ever
+overwritten:
+
+```
+<backup_dir>/<job_name>:<pair_name>/<YYYYMMDD_HHMMSS>/
+```
+
+`backup_dir` must be an absolute path and is unset (disabled) by default. Set
+`backup_dir_retention_days` to automatically prune timestamped subdirectories
+older than N days after each successful (non-dry-run) sync; unset or `0`
+keeps them forever. See `config/global-example.yaml` and
+`config/templates/job.yaml` for examples.
+
 ## JABS agent monitoring
 
 This agent posts to the dashboard's `/api/monitoring/events` endpoint (see
@@ -127,6 +145,7 @@ the Agent Detail page can show a live progress bar.
 | Job reports `partial` warnings | rsync hit vanished/unreadable files mid-run (exit 23/24) — check `sync.log` |
 | Quick verify keeps finding mismatches | Something outside this agent is writing to the destination, or `delete` settings differ between the sync and verify pass |
 | `rsync binary not found` | Install rsync, or set `RSYNC_BIN` in `.env` |
+| `backup_dir not accessible` | The configured `backup_dir` path doesn't exist and couldn't be created (e.g. a dropped NFS mount, or a permissions problem) |
 
 ## Security
 

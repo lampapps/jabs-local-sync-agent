@@ -1,8 +1,11 @@
 """Unit tests for rsync_client.py. Uses mocked subprocess.run so no real
 rsync binary is required to run these tests."""
 
+import os
 import subprocess
+import tempfile
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 import rsync_client
@@ -55,6 +58,18 @@ class TestBuildBaseArgs(unittest.TestCase):
     def test_extra_args_appended(self):
         args = rsync_client.build_base_args(extra_args=["--bwlimit=1000"])
         self.assertIn("--bwlimit=1000", args)
+
+    def test_backup_dir_adds_backup_flags(self):
+        args = rsync_client.build_base_args(backup_dir="/mnt/nas2/.jabs-backups/run1")
+        self.assertIn("--backup", args)
+        self.assertIn("--backup-dir=/mnt/nas2/.jabs-backups/run1", args)
+        self.assertIn("--suffix=", args)
+
+    def test_no_backup_dir_omits_backup_flags(self):
+        args = rsync_client.build_base_args()
+        self.assertNotIn("--backup", args)
+        self.assertFalse(any(a.startswith("--backup-dir=") for a in args))
+        self.assertNotIn("--suffix=", args)
 
 
 class TestRun(unittest.TestCase):
@@ -164,6 +179,41 @@ class TestCountDiffs(unittest.TestCase):
         rsync_client.count_diffs("/src", "/dst", checksum=True)
         args = mock_run.call_args.args[0]
         self.assertIn("--checksum", args)
+
+
+class TestPruneBackupDir(unittest.TestCase):
+    def _make_run_dir(self, root, when):
+        name = when.strftime(rsync_client.BACKUP_DIR_TIMESTAMP_FORMAT)
+        path = os.path.join(root, name)
+        os.makedirs(path)
+        return path
+
+    def test_removes_only_older_than_retention(self):
+        with tempfile.TemporaryDirectory() as root:
+            old_dir = self._make_run_dir(root, datetime.now() - timedelta(days=10))
+            new_dir = self._make_run_dir(root, datetime.now() - timedelta(hours=1))
+            removed = rsync_client.prune_backup_dir(root, retention_days=5)
+            self.assertEqual(removed, 1)
+            self.assertFalse(os.path.isdir(old_dir))
+            self.assertTrue(os.path.isdir(new_dir))
+
+    def test_ignores_malformed_names(self):
+        with tempfile.TemporaryDirectory() as root:
+            stray = os.path.join(root, "not-a-timestamp")
+            os.makedirs(stray)
+            removed = rsync_client.prune_backup_dir(root, retention_days=1)
+            self.assertEqual(removed, 0)
+            self.assertTrue(os.path.isdir(stray))
+
+    def test_noop_when_root_missing(self):
+        removed = rsync_client.prune_backup_dir("/no/such/dir", retention_days=5)
+        self.assertEqual(removed, 0)
+
+    def test_noop_when_retention_disabled(self):
+        with tempfile.TemporaryDirectory() as root:
+            self._make_run_dir(root, datetime.now() - timedelta(days=100))
+            self.assertEqual(rsync_client.prune_backup_dir(root, retention_days=0), 0)
+            self.assertEqual(rsync_client.prune_backup_dir(root, retention_days=None), 0)
 
 
 if __name__ == "__main__":

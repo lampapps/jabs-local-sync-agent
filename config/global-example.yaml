@@ -60,6 +60,20 @@ min_free_bytes: 0   # e.g. 10737418240 for 10 GiB
 # above. Rarely needed; mainly useful for testing experimental rsync flags.
 #extra_args: ["--bwlimit=1000"]
 
+# --- Backup directory (rsync --backup-dir) ---
+# When set, files that a sync would otherwise overwrite or delete on the
+# destination (e.g. because the source changed or VERIFY/delete removed
+# them) are moved here instead, under a per-pair, per-run timestamped
+# subdirectory: <backup_dir>/<job:pair>/<YYYYMMDD_HHMMSS>/. Unset/empty
+# disables the feature. Must be an absolute path; can be overridden per path
+# pair with `backup_dir` under that pair's entry in a job config.
+#backup_dir: "/mnt/nas2/jabs-backups"
+
+# How many days to keep each pair's timestamped backup_dir subdirectories
+# before they're pruned (checked after every real, non-dry-run sync). Unset
+# or 0 keeps them forever -- only meaningful if backup_dir is set.
+#backup_dir_retention_days: 30
+
 # --- Integrity checks ---
 # A cheap quick verify (rsync --dry-run comparing size/mtime only — no file
 # content is read) runs automatically after every pair's sync unless disabled

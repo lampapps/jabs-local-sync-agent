@@ -103,7 +103,7 @@ def _sanitize(name):
     return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
 
 
-def _rsync_options_from_config(config):
+def _rsync_options_from_config(config, backup_dir=None):
     return dict(
         delete=config.get("delete", True),
         preserve_owner=config.get("preserve_owner", False),
@@ -113,8 +113,26 @@ def _rsync_options_from_config(config):
         whole_file=config.get("whole_file", True),
         hard_links=config.get("hard_links", False),
         timeout=config.get("io_timeout", 300),
+        backup_dir=backup_dir,
         extra_args=config.get("extra_args"),
     )
+
+
+def _resolve_backup_dir(config, path_config, label, start_time):
+    """
+    Return (pair_backup_root, run_backup_dir) if a backup_dir is configured
+    for this pair (path-level override, falling back to the job-level
+    setting), else (None, None). pair_backup_root is the per-pair directory
+    that retention pruning operates on; run_backup_dir is the timestamped
+    subdirectory passed to rsync --backup-dir for this run.
+    """
+    effective_backup_dir = path_config.get("backup_dir") or config.get("backup_dir")
+    if not effective_backup_dir:
+        return None, None
+    pair_backup_root = os.path.join(effective_backup_dir, _sanitize(label))
+    timestamp = time.strftime(rsync_client.BACKUP_DIR_TIMESTAMP_FORMAT, time.localtime(start_time))
+    run_backup_dir = os.path.join(pair_backup_root, timestamp)
+    return pair_backup_root, run_backup_dir
 
 
 def _path_label(job_name, path_config):
@@ -187,12 +205,30 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
             )
             return False
 
+    pair_backup_root, run_backup_dir = _resolve_backup_dir(config, path_config, label, start_time)
+    if run_backup_dir and not dry_run:
+        try:
+            os.makedirs(run_backup_dir, exist_ok=True)
+        except OSError as e:
+            msg = f"backup_dir not accessible: {run_backup_dir} ({e})"
+            logger.error(msg)
+            duration = time.time() - start_time
+            send_sync_complete(job_name, target_id, target_label, duration,
+                                run_id=run_id, success=False, error_message=msg, dry_run=dry_run)
+            process_email_event(
+                "error", f"JABS local sync FAILED: {label}",
+                f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} failed: {msg}",
+            )
+            return False
+
     send_sync_stage(job_name, target_id, target_label, "Running sync",
                      run_id=run_id, dry_run=dry_run)
 
     io_timeout = config.get("io_timeout", 300)
     max_duration = config.get("max_duration") or None
-    base_args = rsync_client.build_base_args(**_rsync_options_from_config(config))
+    base_args = rsync_client.build_base_args(
+        **_rsync_options_from_config(config, backup_dir=run_backup_dir)
+    )
 
     # Best-effort live progress: throttled independently for the dashboard
     # POST (wall-clock, so long jobs don't flood the API) and the local log
@@ -275,6 +311,15 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
             logger.error(f"Quick verify FAILED to run: {e}")
             send_check_result(job_name, target_id, target_label, run_id,
                                success=False, error_message=str(e))
+
+    if pair_backup_root and not dry_run:
+        retention_days = config.get("backup_dir_retention_days")
+        try:
+            removed = rsync_client.prune_backup_dir(pair_backup_root, retention_days)
+            if removed:
+                logger.info(f"Pruned {removed} old backup_dir run(s) older than {retention_days}d")
+        except OSError as e:
+            logger.warning(f"backup_dir retention pruning failed: {e}")
 
     return True
 
