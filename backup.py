@@ -164,21 +164,23 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
     target_label = label
     start_time = time.time()
 
+    dry_run_tag = "[DRY RUN] " if dry_run else ""
+
     send_sync_start(job_name, target_id, target_label, source=source,
                      destination=destination, run_id=run_id, job_run_id=job_run_id, dry_run=dry_run)
-    logger.info(f"###### Starting sync: {label} ({socket.gethostname()}) ######")
+    logger.info(f"###### {dry_run_tag}Starting sync: {label} ({socket.gethostname()}) ######")
     logger.info(f"  Source : {source}")
     logger.info(f"  Dest   : {destination}")
 
     if not rsync_client.check_path_accessible(source):
         msg = f"Source directory not accessible: {source}"
-        logger.error(msg)
+        logger.error(f"{dry_run_tag}{msg}")
         duration = time.time() - start_time
         send_sync_complete(job_name, target_id, target_label, duration,
                             run_id=run_id, success=False, error_message=msg, dry_run=dry_run)
         process_email_event(
             "error", f"JABS local sync FAILED: {label}",
-            f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} failed: {msg}",
+            f"{dry_run_tag}Sync of {label} failed: {msg}",
         )
         return False
 
@@ -195,13 +197,13 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
                 f"Destination has only {free / (1024 ** 3):.1f} GiB free "
                 f"(minimum {min_free_bytes / (1024 ** 3):.1f} GiB): {destination}"
             )
-            logger.error(msg)
+            logger.error(f"{dry_run_tag}{msg}")
             duration = time.time() - start_time
             send_sync_complete(job_name, target_id, target_label, duration,
                                 run_id=run_id, success=False, error_message=msg, dry_run=dry_run)
             process_email_event(
                 "error", f"JABS local sync FAILED: {label}",
-                f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} failed: {msg}",
+                f"{dry_run_tag}Sync of {label} failed: {msg}",
             )
             return False
 
@@ -211,13 +213,13 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
             os.makedirs(run_backup_dir, exist_ok=True)
         except OSError as e:
             msg = f"backup_dir not accessible: {run_backup_dir} ({e})"
-            logger.error(msg)
+            logger.error(f"{dry_run_tag}{msg}")
             duration = time.time() - start_time
             send_sync_complete(job_name, target_id, target_label, duration,
                                 run_id=run_id, success=False, error_message=msg, dry_run=dry_run)
             process_email_event(
                 "error", f"JABS local sync FAILED: {label}",
-                f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} failed: {msg}",
+                f"{dry_run_tag}Sync of {label} failed: {msg}",
             )
             return False
 
@@ -256,21 +258,21 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
         )
     except RsyncError as e:
         duration = time.time() - start_time
-        logger.error(f"Sync failed: {e}")
+        logger.error(f"{dry_run_tag}Sync failed: {e}")
         send_sync_complete(job_name, target_id, target_label, duration,
                             run_id=run_id, success=False, error_message=str(e), dry_run=dry_run)
         process_email_event(
             "error", f"JABS local sync FAILED: {label}",
-            f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} failed after {duration:.1f}s: {e}",
+            f"{dry_run_tag}Sync of {label} failed after {duration:.1f}s: {e}",
         )
         return False
 
     duration = time.time() - start_time
     if result["partial"]:
-        logger.warning(f"Sync completed with warnings (partial transfer, exit {result['returncode']})")
+        logger.warning(f"{dry_run_tag}Sync completed with warnings (partial transfer, exit {result['returncode']})")
     else:
         logger.info(
-            f"Sync complete: files={result['files_transferred']} "
+            f"{dry_run_tag}Sync complete: files={result['files_transferred']} "
             f"bytes={result['bytes_transferred']} duration={duration:.1f}s"
         )
 
@@ -281,7 +283,7 @@ def sync_one_path(job_name, path_config, job_exclude, config, dry_run=False, job
     )
     process_email_event(
         "backup_complete", f"JABS local sync complete: {label}",
-        f"{'[DRY RUN] ' if dry_run else ''}Sync of {label} completed in {duration:.1f}s "
+        f"{dry_run_tag}Sync of {label} completed in {duration:.1f}s "
         f"({result['files_transferred']} files transferred).",
     )
 
